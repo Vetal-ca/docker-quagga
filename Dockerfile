@@ -1,36 +1,49 @@
 FROM alpine:3.10 as build
 MAINTAINER "Vitali Khlebko vitali.khlebko@vetal.ca"
 
-ARG POSTGRES_TAG=REL_12_0
+ARG QUAGGA_TAG=quagga-1.2.4
 
-RUN apk update && apk add git g++ make readline-dev zlib-dev perl bison flex linux-headers
+RUN apk update && apk add git automake libtool texinfo gawk g++ autoconf pkgconfig readline-dev \
+	make linux-headers
 
 RUN cd /tmp &&\
-    git clone https://github.com/postgres/postgres.git postgres &&\
-    cd postgres &&\
-    git checkout ${POSTGRES_TAG} &&\
+	git clone https://github.com/c-ares/c-ares.git &&\
+	cd c-ares &&\
+	./buildconf && ./configure && make && make install
+
+RUN cd /tmp &&\
+    git clone https://github.com/Quagga/quagga.git &&\
+    cd quagga &&\
+    git checkout ${QUAGGA_TAG} &&\
     git config pull.rebase true &&\
-    ./configure &&\
-    make &&\
-    make install
+	 ./bootstrap.sh &&\
+	 ./configure --disable-doc --enable-user=root --enable-group=root --with-cflags=-ggdb --sysconfdir=/etc/quagga --enable-vtysh   --localstatedir=/var/run/quagga &&\
+	 make && make install
 
 FROM alpine:3.10
 
-COPY --from=build /usr/local/pgsql /usr/local/pgsql
+RUN mkdir -p /etc/quagga/
 
-ENV LANG en_US.utf8
-ENV PGDATA /var/lib/postgresql/data
-ENV PATH="/usr/local/pgsql/bin:${PATH}"
+COPY --from=build /usr/local/bin/bgp_btoa /usr/local/bin/bgp_btoa
+COPY --from=build /usr/local/bin/test_igmpv3_join /usr/local/bin/test_igmpv3_join
+COPY --from=build /usr/local/bin/vtysh /usr/local/bin/vtysh
+COPY --from=build /usr/local/lib/libfpm_pb.* /usr/local/lib/
+COPY --from=build /usr/local/lib/libospf* /usr/local/lib/
+COPY --from=build /usr/local/lib/libquagga* /usr/local/lib/
+COPY --from=build /usr/local/lib/libzebra.* /usr/local/lib/
+COPY --from=build /usr/local/sbin/bgpd /usr/local/sbin/bgpd
+COPY --from=build /usr/local/sbin/isisd /usr/local/sbin/isisd
+COPY --from=build /usr/local/sbin/nhrpd /usr/local/sbin/nhrpd
+COPY --from=build /usr/local/sbin/ospf6d /usr/local/sbin/ospf6d
+COPY --from=build /usr/local/sbin/ospfclient /usr/local/sbin/ospfclient
+COPY --from=build /usr/local/sbin/ospfd /usr/local/sbin/ospfd
+COPY --from=build /usr/local/sbin/pimd /usr/local/sbin/pimd
+COPY --from=build /usr/local/sbin/ripd /usr/local/sbin/ripd
+COPY --from=build /usr/local/sbin/ripngd /usr/local/sbin/ripngd
+COPY --from=build /usr/local/sbin/watchquagga /usr/local/sbin/watchquagga
+COPY --from=build /usr/local/sbin/zebra /usr/local/sbin/zebra
 
-COPY docker-entrypoint.sh /scripts/docker-entrypoint.sh
-#    addgroup -g 70 postgres &&\
-#    adduser -H -D -u 70 -s /bin/sh -h :/var/lib/postgresql -g "" postgres &&\
 
-RUN apk update && apk add su-exec bash &&\
-    mkdir -p $PGDATA &&\
-    mkdir -p /var/run/postgresql &&\
-    mkdir /docker-entrypoint-initdb.d &&\
-    chown -R postgres:postgres /var/run/postgresql
+#A /usr/local/include/quagga/*  -- ?
 
-ENTRYPOINT ["/scripts/docker-entrypoint.sh"]
-CMD ["postgres"]
+
