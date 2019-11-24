@@ -22,7 +22,8 @@ RUN cd /tmp &&\
 
 FROM alpine:3.10
 
-RUN mkdir -p /etc/quagga/ &&\
+RUN apk update && apk add readline &&\
+	mkdir -p /etc/quagga/ &&\
 	mkdir -p /var/run/quagga/
 
 COPY --from=build /usr/local/bin/bgp_btoa /usr/local/bin/bgp_btoa
